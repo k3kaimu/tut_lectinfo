@@ -37,6 +37,7 @@ import std.range;
 import std.regex;
 import std.stdio;
 import std.string;
+import std.format;
 
 import carbon.templates;
 
@@ -52,8 +53,6 @@ enum lastInfoFilePath = "last.dat";
 enum lectureInfoWebURL = "http://bit.ly/TYB9hb";
 enum imcWebURL = "http://www.imc.tut.ac.jp/";
 enum tutWebURL = "http://www.tut.ac.jp/";
-
-enum hashTag = "#TUT休講";
 
 immutable SysTime appStartTime;
 
@@ -111,7 +110,7 @@ struct SavedData
         cancel = null;
         extra = null;
         time = appStartTime.to!DateTime();
-        twWriter = TweetWriter(tw, dur!"seconds"(30));
+        twWriter = TweetWriter(tw, dur!"seconds"(10));
     }
 }
 
@@ -142,9 +141,11 @@ struct TweetWriter
         immutable N = _queue.length;
         size_t i;
         while(!_queue.empty){
-            _tw.callAPI!"statuses.update"(["status" :
-                format("[%s/%s] %s", i+1, N, _queue.front)
-            ]);
+            immutable str = format("[%s/%s] %s", i+1, N, _queue.front);
+
+            log.writeln!"verbose"(str);
+
+            _tw.callAPI!"statuses.update"(["status" : str]);
             core.thread.Thread.sleep(_interval);
 
             ++i;
@@ -226,7 +227,20 @@ void main()
     }();
 
     if(twHeader.length)
-    twitter.callAPI!"statuses.update"(["status": twHeader]);
+        twitter.callAPI!"statuses.update"(["status": twHeader]);
+
+    {
+        foreach(e; botData.cancel)
+            if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
+                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
+                botData.twWriter.put(format(`@k3_kaimu 今日の%s限目の%sは休講になりました`, e.period, e.title));
+
+        foreach(e; botData.extra)
+            if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
+                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
+                botData.twWriter.put(format(`@k3_kaimu 今日は%s限目に%sが入っています`, e.period, e.title));
+    }
+
 
     botData.twWriter.flush();
 }
@@ -280,16 +294,27 @@ void updateLectureInfo(ref SavedData botData)
     }
 
 
+    string hashTags(T)(T e)
+    {
+        auto app = appender!string();
+        foreach(g; e.grade)
+            foreach(m; e.major)
+                app.formattedWrite("#TUT%s_%s ", g, cast(uint)m);
+
+        return app.data;
+    }
+
+
     findNewOrToday(newCancelInfo, botData.cancel,
         (CancelInfo e){
             immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の %s年%s月%s日の講義が休講になりました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, lectureInfoWebURL, hashTag);
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, lectureInfoWebURL, hashTags(e));
 
             botData.twWriter.put(twText);
         },
         (CancelInfo e){
             immutable twText = "本日(%s年%s月%s日) の [%-(%s, %)] 系 [%-(%s, %)] %s の講義は休講です. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, lectureInfoWebURL, hashTag);
+                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, lectureInfoWebURL, hashTags(e));
 
             botData.twWriter.put(twText);
         }
@@ -300,13 +325,13 @@ void updateLectureInfo(ref SavedData botData)
     findNewOrToday(newExtraInfo, botData.extra,
         (ExtraInfo e){
             immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の補講が %s年%s月%s日に入りました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day,  lectureInfoWebURL, hashTag);
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day,  lectureInfoWebURL, hashTags(e));
 
              botData.twWriter.put(twText);
         },
         (ExtraInfo e){
             immutable twText = "本日[%s年%s月%s日]、 [%-(%s, %)] 系 [%-(%s, %)] %s の講義が %s限目に入っています. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, lectureInfoWebURL, hashTag);
+                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, lectureInfoWebURL, hashTags(e));
 
              botData.twWriter.put(twText);
         }
