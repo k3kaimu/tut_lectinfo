@@ -307,14 +307,14 @@ void updateLectureInfo(ref SavedData botData)
 
     findNewOrToday(newCancelInfo, botData.cancel,
         (CancelInfo e){
-            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の %s年%s月%s日の講義が休講になりました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, lectureInfoWebURL, hashTags(e));
+            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の %s年%s月%s日%s限目の講義が休講になりました. %s %s"
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, lectureInfoWebURL, hashTags(e));
 
             botData.twWriter.put(twText);
         },
         (CancelInfo e){
-            immutable twText = "本日(%s年%s月%s日) の [%-(%s, %)] 系 [%-(%s, %)] %s の講義は休講です. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, lectureInfoWebURL, hashTags(e));
+            immutable twText = "本日(%s年%s月%s日)%s限目 の [%-(%s, %)] 系 [%-(%s, %)] %s の講義は休講です. %s %s"
+                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, lectureInfoWebURL, hashTags(e));
 
             botData.twWriter.put(twText);
         }
@@ -324,8 +324,8 @@ void updateLectureInfo(ref SavedData botData)
 
     findNewOrToday(newExtraInfo, botData.extra,
         (ExtraInfo e){
-            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の補講が %s年%s月%s日に入りました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day,  lectureInfoWebURL, hashTags(e));
+            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の補講が %s年%s月%s日%s限目に入りました. %s %s"
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, lectureInfoWebURL, hashTags(e));
 
              botData.twWriter.put(twText);
         },
