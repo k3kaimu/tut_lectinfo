@@ -1,11 +1,12 @@
 {
-	"name": "lectinfo",
-	"description": "Tweet some informations of TUT lectures.",
-	"copyright": "Copyright © 2014, Kazuki Komatsu",
-	"authors": ["Kazuki Komatsu"],
+    "name": "lectinfo",
+    "description": "Tweet some informations of TUT lectures.",
+    "copyright": "Copyright © 2014, Kazuki Komatsu",
+    "authors": ["Kazuki Komatsu"],
     "libs" : ["curl"],
-	"dependencies": {
-        "graphite" : ">=1.2.0",
-        "msgpack-d" : ">=0.9.1"
-	}
+    "dependencies": {
+        "carbon": ">=1.0.0",
+        "graphite": ">=1.3.0",
+        "msgpack-d": ">=0.9.1"
+    }
 }

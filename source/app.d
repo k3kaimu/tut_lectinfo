@@ -233,12 +233,12 @@ void main()
         foreach(e; botData.cancel)
             if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
                 && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
-                botData.twWriter.put(format(`@k3_kaimu 今日の%s限目の%sは休講になりました`, e.period, e.title));
+                with(e) botData.twWriter.put(mixin(Lstr!`@k3kaimu 今日の%[period%]限目の%[title%]は休講になりました`));
 
         foreach(e; botData.extra)
             if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
                 && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
-                botData.twWriter.put(format(`@k3_kaimu 今日は%s限目に%sが入っています`, e.period, e.title));
+                with(e) botData.twWriter.put(mixin(Lstr!`@k3_kaimu 今日は%[period%]限目に%[title%]が入っています`));
     }
 
 
@@ -314,7 +314,7 @@ void updateLectureInfo(ref SavedData botData)
         },
         (CancelInfo e){
             immutable twText = "本日(%s年%s月%s日)%s限目 の [%-(%s, %)] 系 [%-(%s, %)] %s の講義は休講です. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, lectureInfoWebURL, hashTags(e));
+                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.grade, e.major.map!(majorToString), e.title, e.period, lectureInfoWebURL, hashTags(e));
 
             botData.twWriter.put(twText);
         }
