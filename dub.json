@@ -5,8 +5,8 @@
     "authors": ["Kazuki Komatsu"],
     "libs" : ["curl"],
     "dependencies": {
-        "carbon": ">=1.0.0",
-        "graphite": ">=1.3.0",
+        "carbon": "~>1.4.1",
+        "graphite": "~>1.4.4",
         "msgpack-d": ">=0.9.1"
     }
 }

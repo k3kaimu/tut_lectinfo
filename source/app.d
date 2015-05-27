@@ -29,7 +29,10 @@ import std.algorithm;
 import std.array;
 import std.conv;
 import std.datetime;
+import std.experimental.logger;
 import std.file;
+import std.format;
+import std.functional;
 import std.net.curl;
 import std.path;
 import std.random;
@@ -37,12 +40,13 @@ import std.range;
 import std.regex;
 import std.stdio;
 import std.string;
-import std.format;
+import std.typecons;
+
 
 import carbon.templates;
 
 import graphite.twitter;
-import graphite.utils.log;
+//import graphite.utils.log;
 
 import msgpack;
 
@@ -56,22 +60,12 @@ enum tutWebURL = "http://www.tut.ac.jp/";
 
 immutable SysTime appStartTime;
 
-mixin defGlobalVariables!("log",
-{
-    auto file = File("log_tutlectinfo.txt", "a");
-    return tuple(logger!(LogFormat.readable)(file));
-});
-
+Logger log;
 
 static this()
 {
     appStartTime = Clock.currTime;
-}
-
-
-static this()
-{
-
+    log = new FileLogger(File("log_tutlectinfo.txt", "a"));
 }
 
 
@@ -140,16 +134,38 @@ struct TweetWriter
     {
         immutable N = _queue.length;
         size_t i;
-        while(!_queue.empty){
-            immutable str = format("[%s/%s] %s", i+1, N, _queue.front);
+        _queue.popFront();
+        try{
+            while(!_queue.empty){
+                immutable str = format("[%s/%s] %s", i+1, N, _queue.front);
 
-            log.writeln!"verbose"(str);
+                log.info(str);
+                auto dstr = str.to!dstring;
+                if(dstr.length > 130){
+                    dstring buffer;
+                    foreach(e; dstr.split()){
+                        if(buffer.length + e.length < 130)
+                            buffer ~= e;
+                        else{
+                            _tw.callAPI!"statuses.update"(["status" : buffer.to!string]);
+                            core.thread.Thread.sleep(_interval/2);
+                            buffer = e;
+                        }
+                    }
 
-            _tw.callAPI!"statuses.update"(["status" : str]);
-            core.thread.Thread.sleep(_interval);
+                    _tw.callAPI!"statuses.update"(["status" : buffer.to!string]);
+                }else{
+                    _tw.callAPI!"statuses.update"(["status" : str]);
+                }
 
-            ++i;
-            _queue.popFront();
+                core.thread.Thread.sleep(_interval);
+
+                ++i;
+                _queue.popFront();
+            }
+        }
+        catch(Exception ex){
+            log.error(ex);
         }
     }
 
@@ -165,9 +181,9 @@ void main()
 {
     auto twitter = Twitter(accessToken);
 
-    log.writeln!"verbose"("## START : ", appStartTime);
+    log.info("## START : ", appStartTime);
     scope(exit)
-        log.writeln!"verbose"("## END : ", Clock.currTime, "\n");
+        log.info("## END : ", Clock.currTime, "\n");
 
     auto botData = () {
         SavedData loaded;
@@ -175,7 +191,7 @@ void main()
             try loaded = SavedData.loadFromFile(lastInfoFilePath);
             catch(Exception ex){
                 loaded.initialize(twitter);
-                log.writeln!"error"(ex);
+                log.error(ex);
             }
         }
         return loaded;
@@ -194,8 +210,8 @@ void main()
             state[key] = false;
     }
 
-    adaptUpdateWebHTML!"lecHTML"("lec", lectureInfoWebURL, "休講・補講情報ウェブページに更新があります");
-    adaptUpdateWebHTML!"webHTML"("web", tutWebURL, "TUTウェブページに更新があります");
+    adaptUpdateWebHTML!"lecHTML"("lec", lectureInfoWebURL, "休講・補講情報ウェブページに更新があります " ~ lectureInfoWebURL);
+    //adaptUpdateWebHTML!"webHTML"("web", tutWebURL, "TUTウェブページに更新があります");
     //adaptUpdateWebHTML!"imcHTML"("imc", imcWebURL, "IMCウェブページに更新があります");
 
     updateLectureInfo(botData);
@@ -212,8 +228,8 @@ void main()
         string[] slist;
         if(!state["lec"])
             slist ~= "休講・補講情報";
-        if(!state["web"])
-            slist ~= "TUTウェブページ";
+        //if(!state["web"])
+        //    slist ~= "TUTウェブページ";
         //if(!state["imc"])
             //slist ~= "IMCウェブページ";
 
@@ -232,12 +248,12 @@ void main()
     {
         foreach(e; botData.cancel)
             if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
-                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
+                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B4))
                 with(e) botData.twWriter.put(mixin(Lstr!`@k3kaimu 今日の%[period%]限目の%[title%]は休講になりました`));
 
         foreach(e; botData.extra)
             if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime
-                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B3))
+                && e.major.canFind(Major.elec) && e.grade.canFind(Grade.B4))
                 with(e) botData.twWriter.put(mixin(Lstr!`@k3_kaimu 今日は%[period%]限目に%[title%]が入っています`));
     }
 
@@ -283,7 +299,7 @@ void updateLectureInfo(ref SavedData botData)
                    void delegate(T) onToday)
     if(is(Unqual!T : Unqual!U))
     {
-        writeln(newArray);
+        //writeln(newArray);
         foreach(i, e; newArray){
             // その日はじめて起動され、今日の情報なら
             if(botData.time.day < appStartTime.day && e.date == cast(Date)appStartTime)
@@ -297,9 +313,14 @@ void updateLectureInfo(ref SavedData botData)
     string hashTags(T)(T e)
     {
         auto app = appender!string();
-        foreach(g; e.grade)
-            foreach(m; e.major)
-                app.formattedWrite("#TUT%s_%s ", g, cast(uint)m);
+        foreach(g; e.grade){
+            if(e.major.length >= 4)
+                app.formattedWrite("#TUT%s_0 ", g);
+            else{
+                foreach(m; e.major)
+                    app.formattedWrite("#TUT%s_%s ", g, cast(uint)m);
+            }
+        }
 
         return app.data;
     }
@@ -307,14 +328,14 @@ void updateLectureInfo(ref SavedData botData)
 
     findNewOrToday(newCancelInfo, botData.cancel,
         (CancelInfo e){
-            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の %s年%s月%s日%s限目の講義が休講になりました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, lectureInfoWebURL, hashTags(e));
+            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の %s年%s月%s日%s限目の講義が休講になりました. %s"
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, hashTags(e));
 
             botData.twWriter.put(twText);
         },
         (CancelInfo e){
-            immutable twText = "本日(%s年%s月%s日)%s限目 の [%-(%s, %)] 系 [%-(%s, %)] の %s の講義は休講です. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day, e.period, e.major.map!(majorToString), e.grade, e.title, lectureInfoWebURL, hashTags(e));
+            immutable twText = "本日(%s年%s月%s日)%s限目 の [%-(%s, %)] 系 [%-(%s, %)] の %s の講義は休講です. %s"
+                .format(e.date.year, e.date.month.to!uint, e.date.day, e.period, e.major.map!(majorToString), e.grade, e.title, hashTags(e));
 
             botData.twWriter.put(twText);
         }
@@ -324,14 +345,14 @@ void updateLectureInfo(ref SavedData botData)
 
     findNewOrToday(newExtraInfo, botData.extra,
         (ExtraInfo e){
-            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の補講が %s年%s月%s日%s限目に入りました. %s %s"
-                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, lectureInfoWebURL, hashTags(e));
+            immutable twText = "[%-(%s, %)] 系 [%-(%s, %)] %s の補講が %s年%s月%s日%s限目に入りました. %s"
+                .format(e.major.map!(majorToString), e.grade, e.title, e.date.year, e.date.month.to!uint, e.date.day, e.period, hashTags(e));
 
              botData.twWriter.put(twText);
         },
         (ExtraInfo e){
-            immutable twText = "本日[%s年%s月%s日]、 [%-(%s, %)] 系 [%-(%s, %)] %s の講義が%s限目に入っています. %s %s"
-                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, lectureInfoWebURL, hashTags(e));
+            immutable twText = "本日[%s年%s月%s日]、 [%-(%s, %)] 系 [%-(%s, %)] %s の講義が%s限目に入っています. %s"
+                .format(e.date.year, e.date.month.to!uint, e.date.day,  e.major.map!(majorToString), e.grade, e.title, e.period, hashTags(e));
 
              botData.twWriter.put(twText);
         }
@@ -357,11 +378,11 @@ string majorToString(Major mjr)
     final switch(mjr)
     {
         case Major.comm : return "共通";
-        case Major.mach : return "機械";
-        case Major.elec : return "電気・電子情報";
-        case Major.info : return "情報・知能";
-        case Major.envi : return "環境・生命";
-        case Major.soci : return "建築・都市";
+        case Major.mach : return "1";
+        case Major.elec : return "2";
+        case Major.info : return "3";
+        case Major.envi : return "4";
+        case Major.soci : return "5";
     }
     assert(0);
 }
@@ -404,7 +425,7 @@ struct ClassInfo
         info.title = r[5];
         info.teacher = r[6];
 
-        foreach(e; __traits(allMembers, Grade))
+        foreach(e; [__traits(allMembers, Grade)])
             if(!r[7].find(e).empty)
                 info.grade ~= to!Grade(e);
 
